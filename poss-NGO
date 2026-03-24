@@ -1,50 +1,49 @@
 repeat task.wait() until game:IsLoaded()
 
+--// LOAD RAYFIELD
+local Rayfield
+pcall(function()
+    Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+end)
+
+if not Rayfield then
+    warn("Rayfield failed to load")
+    return
+end
+
 --// SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 --// CONFIG
 local Config = {
     ESP = true,
-    Aimbot = true,
+    Aimbot = false,
     TeamCheck = true,
-    Hitbox = false,
-    HitboxSize = 5,
-    FOV = 150
+    FOV = 180
 }
 
---// SIMPLE UI (NO RAYFIELD = SAFE)
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+--// UI WINDOW
+local Window = Rayfield:CreateWindow({
+    Name = "BANANA ELITE 🍌",
+    LoadingTitle = "BANANA ELITE",
+    LoadingSubtitle = "Stable Version",
+    ConfigurationSaving = {Enabled = false}
+})
 
-local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0,200,0,150)
-Frame.Position = UDim2.new(0,20,0,200)
-Frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+local Combat = Window:CreateTab("Combat")
+local Visual = Window:CreateTab("Visual")
 
-local function CreateBtn(name, y, callback)
-    local b = Instance.new("TextButton", Frame)
-    b.Size = UDim2.new(1,0,0,30)
-    b.Position = UDim2.new(0,0,0,y)
-    b.Text = name
-    b.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    b.TextColor3 = Color3.new(1,1,1)
-    b.MouseButton1Click:Connect(callback)
-end
-
-CreateBtn("Toggle ESP",0,function() Config.ESP = not Config.ESP end)
-CreateBtn("Toggle Aimbot",30,function() Config.Aimbot = not Config.Aimbot end)
-CreateBtn("Toggle TeamCheck",60,function() Config.TeamCheck = not Config.TeamCheck end)
-CreateBtn("Toggle Hitbox",90,function() Config.Hitbox = not Config.Hitbox end)
-
---// FOV (SAFE UI)
-local FOV = Instance.new("Frame", ScreenGui)
+--// FOV CIRCLE (SAFE)
+local FOV = Instance.new("Frame")
 FOV.Size = UDim2.new(0, Config.FOV, 0, Config.FOV)
 FOV.AnchorPoint = Vector2.new(0.5,0.5)
 FOV.Position = UDim2.new(0.5,0,0.5,0)
 FOV.BackgroundTransparency = 1
+FOV.Parent = game.CoreGui
 
 local stroke = Instance.new("UIStroke", FOV)
 stroke.Thickness = 2
@@ -52,66 +51,114 @@ stroke.Color = Color3.fromRGB(0,255,255)
 
 Instance.new("UICorner", FOV).CornerRadius = UDim.new(1,0)
 
---// TEAM
-local function GetTeam(p)
-    if p.TeamColor == BrickColor.new("Bright red") then
-        return "Enemy", Color3.fromRGB(255,0,0)
-    elseif p.TeamColor == BrickColor.new("Bright blue") then
-        return "Ally", Color3.fromRGB(0,170,255)
+--// FUNCTIONS
+
+local function GetHealth(character)
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health or 0
+end
+
+local function GetRole(player, character)
+    if player.Team and player.Team.Name ~= "" then
+        return player.Team.Name
     end
-    return "Unknown", Color3.new(1,1,1)
+
+    local stats = player:FindFirstChild("leaderstats")
+    if stats then
+        for _,v in pairs(stats:GetChildren()) do
+            if tostring(v.Name):lower():find("team") then
+                return tostring(v.Value)
+            end
+        end
+    end
+
+    if character then
+        for _,v in pairs(character:GetChildren()) do
+            if v:IsA("StringValue") then
+                return tostring(v.Value)
+            end
+        end
+    end
+
+    return "Unknown"
 end
 
-local function IsEnemy(p)
+local function GetColor(role)
+    role = tostring(role):lower()
+
+    if role:find("red") then
+        return Color3.fromRGB(255,0,0)
+    elseif role:find("blue") then
+        return Color3.fromRGB(0,170,255)
+    end
+
+    return Color3.fromRGB(255,255,255)
+end
+
+local function IsEnemy(player, character)
     if not Config.TeamCheck then return true end
-    return p.TeamColor ~= LocalPlayer.TeamColor
+
+    local myRole = GetRole(LocalPlayer, LocalPlayer.Character)
+    local targetRole = GetRole(player, character)
+
+    return myRole ~= targetRole
 end
 
---// ESP
+--// ESP SYSTEM
 local ESP = {}
 
-local function CreateESP(p)
-    if p == LocalPlayer then return end
-
-    local bill = Instance.new("BillboardGui", ScreenGui)
-    bill.Size = UDim2.new(0,200,0,40)
-    bill.AlwaysOnTop = true
-
-    local txt = Instance.new("TextLabel", bill)
-    txt.Size = UDim2.new(1,0,1,0)
-    txt.BackgroundTransparency = 1
-    txt.TextScaled = true
-    txt.TextStrokeTransparency = 0
-
-    ESP[p] = {GUI=bill,Text=txt}
+local function RemoveESP(player)
+    if ESP[player] then
+        ESP[player].GUI:Destroy()
+        ESP[player] = nil
+    end
 end
 
-local function RemoveESP(p)
-    if ESP[p] then
-        ESP[p].GUI:Destroy()
-        ESP[p] = nil
-    end
+Players.PlayerRemoving:Connect(RemoveESP)
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+
+    local gui = Instance.new("BillboardGui")
+    gui.Size = UDim2.new(0,200,0,50)
+    gui.AlwaysOnTop = true
+    gui.Parent = game.CoreGui
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1,0,1,0)
+    text.BackgroundTransparency = 1
+    text.TextScaled = true
+    text.TextStrokeTransparency = 0
+    text.Parent = gui
+
+    ESP[player] = {GUI=gui, Text=text}
 end
 
 for _,p in pairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(RemoveESP)
 
---// TARGET
+--// TARGET SYSTEM
+local LockedTarget = nil
+
 local function GetTarget()
-    local closest, dist = nil, Config.FOV^2
+    local closest = nil
+    local shortest = Config.FOV^2
 
     for _,p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
-            local head = p.Character:FindFirstChild("Head")
-            if head and IsEnemy(p) then
-                local pos, vis = Camera:WorldToViewportPoint(head.Position)
-                if vis then
+            local char = p.Character
+            local head = char:FindFirstChild("Head")
+
+            if head and GetHealth(char) > 0 and IsEnemy(p,char) then
+                local pos, visible = Camera:WorldToViewportPoint(head.Position)
+
+                if visible then
                     local dx = pos.X - Camera.ViewportSize.X/2
                     local dy = pos.Y - Camera.ViewportSize.Y/2
-                    local mag = dx*dx + dy*dy
-                    if mag < dist then
-                        dist = mag
+                    local dist = dx*dx + dy*dy
+
+                    if dist < shortest then
+                        shortest = dist
                         closest = head
                     end
                 end
@@ -119,51 +166,104 @@ local function GetTarget()
         end
     end
 
-    return closest
+    LockedTarget = closest
 end
 
---// LOOP
+--// UI CONTROLS
+Combat:CreateToggle({
+    Name="Aimbot",
+    CurrentValue=false,
+    Callback=function(v) Config.Aimbot=v end
+})
+
+Combat:CreateToggle({
+    Name="Team Check",
+    CurrentValue=true,
+    Callback=function(v) Config.TeamCheck=v end
+})
+
+Visual:CreateToggle({
+    Name="ESP",
+    CurrentValue=true,
+    Callback=function(v) Config.ESP=v end
+})
+
+Visual:CreateSlider({
+    Name="FOV Size",
+    Range={50,400},
+    CurrentValue=180,
+    Callback=function(v) Config.FOV=v end
+})
+
+--// TOGGLE GUI BUTTON
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0,120,0,40)
+ToggleBtn.Position = UDim2.new(0,20,0.5,-20)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0,170,255)
+ToggleBtn.Text = "Toggle UI"
+ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+ToggleBtn.TextScaled = true
+ToggleBtn.Parent = game.CoreGui
+
+Instance.new("UICorner", ToggleBtn)
+
+local UIVisible = true
+
+local function ToggleUI()
+    UIVisible = not UIVisible
+    for _,v in pairs(game.CoreGui:GetChildren()) do
+        if v.Name == "Rayfield" then
+            v.Enabled = UIVisible
+        end
+    end
+end
+
+ToggleBtn.MouseButton1Click:Connect(ToggleUI)
+
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        ToggleUI()
+    end
+end)
+
+--// MAIN LOOP
 RunService.RenderStepped:Connect(function()
 
+    -- FOV
     FOV.Size = UDim2.new(0, Config.FOV, 0, Config.FOV)
     FOV.Visible = Config.Aimbot
 
-    local target = GetTarget()
+    GetTarget()
 
-    if Config.Aimbot and target then
-        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, target.Position)
+    -- AIMBOT
+    if Config.Aimbot and LockedTarget then
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, LockedTarget.Position)
     end
 
+    -- ESP
     for _,p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
+
             local esp = ESP[p]
-            local c = p.Character
+            local char = p.Character
 
-            if not esp or not c then continue end
+            if not esp or not char then continue end
 
-            local root = c:FindFirstChild("HumanoidRootPart")
-            if not root or not Config.ESP or not IsEnemy(p) then
+            local root = char:FindFirstChild("HumanoidRootPart")
+
+            if not root or GetHealth(char) <= 0 or not Config.ESP then
                 esp.GUI.Enabled = false
                 continue
             end
 
-            local dist = (root.Position - Camera.CFrame.Position).Magnitude
-            if dist > 300 then
-                esp.GUI.Enabled = false
-                continue
-            end
-
-            local team, color = GetTeam(p)
+            local role = GetRole(p,char)
+            local color = GetColor(role)
 
             esp.GUI.Adornee = root
             esp.GUI.Enabled = true
-            esp.Text.Text = p.Name.." ["..team.."] "..math.floor(dist).."m"
+            esp.Text.Text = p.Name.." ["..role.."]"
             esp.Text.TextColor3 = color
-
-            if Config.Hitbox then
-                root.Size = Vector3.new(Config.HitboxSize,Config.HitboxSize,Config.HitboxSize)
-                root.Transparency = 0.5
-            end
         end
     end
 end)
