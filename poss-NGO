@@ -1,56 +1,50 @@
 repeat task.wait() until game:IsLoaded()
 
---// CLEAN UI
-pcall(function()
-    game.CoreGui:FindFirstChild("BANANA_KEY"):Destroy()
-end)
-
---// KEY
-local correctKey = "BANANA555"
-
---// MAIN FUNCTION
-function startBANANA()
-
--- LOAD UI
+--// LOAD UI
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- SERVICES
+--// SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- CONFIG
+--// CONFIG (LOST FRONT)
 local Config = {
     ESP = true,
     Aimbot = false,
     SilentAim = false,
+
     TeamCheck = true,
-    WallCheck = false,
+    WallCheck = true,
+
     Hitbox = false,
     HitboxSize = 5,
-    FOV = 200
+
+    FOV = 120,
+    MaxDistance = 300
 }
 
--- UI
+--// UI
 local Window = Rayfield:CreateWindow({
     Name = "BANANA ELITE 🍌💀",
     LoadingTitle = "BANANA ELITE",
-    LoadingSubtitle = "Warfare System",
+    LoadingSubtitle = "The Lost Front",
     ConfigurationSaving = {Enabled = false}
 })
 
 local Combat = Window:CreateTab("Combat")
 local Visual = Window:CreateTab("Visual")
 
--- FOV
+--// FOV (TACTICAL STYLE)
 local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 2
+FOVCircle.Thickness = 1
 FOVCircle.NumSides = 100
 FOVCircle.Filled = false
-FOVCircle.Color = Color3.fromRGB(255,0,0)
+FOVCircle.Color = Color3.fromRGB(200,200,200)
 
--- FUNCTIONS
+--// FUNCTIONS
 local function GetHealth(c)
     local h=c:FindFirstChildOfClass("Humanoid")
     return h and h.Health or 0
@@ -62,12 +56,14 @@ end
 
 local function GetColor(team)
     team = tostring(team):lower()
-    if team:find("red") then
-        return Color3.fromRGB(255,50,50)
-    elseif team:find("blue") then
-        return Color3.fromRGB(50,150,255)
+
+    if team:find("enemy") then
+        return Color3.fromRGB(255,80,80)
+    elseif team:find("ally") then
+        return Color3.fromRGB(120,120,120)
     end
-    return Color3.fromRGB(255,255,255)
+
+    return Color3.fromRGB(180,180,180)
 end
 
 local function IsEnemy(p)
@@ -77,6 +73,7 @@ end
 
 local function IsVisible(part)
     if not Config.WallCheck then return true end
+
     local origin = Camera.CFrame.Position
     local direction = (part.Position - origin)
 
@@ -88,7 +85,7 @@ local function IsVisible(part)
     return not result or result.Instance:IsDescendantOf(part.Parent)
 end
 
--- ESP
+--// ESP
 local ESP = {}
 
 local function CreateESP(p)
@@ -114,7 +111,7 @@ end
 for _,p in pairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
 
--- REMOVE ESP (FIX LAG)
+-- REMOVE ESP
 Players.PlayerRemoving:Connect(function(p)
     if ESP[p] then
         if ESP[p].GUI then ESP[p].GUI:Destroy() end
@@ -122,7 +119,7 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- TARGET
+--// TARGET
 local LockedTarget=nil
 
 local function GetTarget()
@@ -133,8 +130,13 @@ local function GetTarget()
         if p~=LocalPlayer and p.Character then
             local c=p.Character
             local head=c:FindFirstChild("Head")
+            local root=c:FindFirstChild("HumanoidRootPart")
 
-            if head and GetHealth(c)>0 and IsEnemy(p) and IsVisible(head) then
+            if head and root and GetHealth(c)>0 and IsEnemy(p) and IsVisible(head) then
+                
+                local distance = (root.Position - Camera.CFrame.Position).Magnitude
+                if distance > Config.MaxDistance then continue end
+
                 local pos,vis=Camera:WorldToViewportPoint(head.Position)
 
                 if vis then
@@ -154,7 +156,7 @@ local function GetTarget()
     LockedTarget=closest
 end
 
--- UI CONTROLS
+--// UI CONTROLS
 Combat:CreateToggle({Name="Aimbot (Head Lock)",Callback=function(v)Config.Aimbot=v end})
 Combat:CreateToggle({Name="Silent Aim (Soft)",Callback=function(v)Config.SilentAim=v end})
 Combat:CreateToggle({Name="Team Check",Callback=function(v)Config.TeamCheck=v end})
@@ -172,25 +174,28 @@ Visual:CreateToggle({Name="ESP",Callback=function(v)Config.ESP=v end})
 
 Visual:CreateSlider({
     Name="FOV Size",
-    Range={50,400},
-    CurrentValue=200,
+    Range={50,300},
+    CurrentValue=120,
     Callback=function(v)Config.FOV=v end
 })
 
--- LOOP (OPTIMIZED)
+--// LOOP (OPTIMIZED)
 task.spawn(function()
     while task.wait(0.05) do
 
+        -- FOV
         FOVCircle.Radius = Config.FOV
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
         FOVCircle.Visible = Config.Aimbot
 
         GetTarget()
 
+        -- AIMBOT
         if Config.Aimbot and LockedTarget then
             Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, LockedTarget.Position)
         end
 
+        -- SILENT AIM
         if Config.SilentAim and LockedTarget then
             Camera.CFrame = Camera.CFrame:Lerp(
                 CFrame.lookAt(Camera.CFrame.Position, LockedTarget.Position),
@@ -198,6 +203,7 @@ task.spawn(function()
             )
         end
 
+        -- ESP
         for _,p in pairs(Players:GetPlayers()) do
             if p~=LocalPlayer then
                 local esp=ESP[p]
@@ -217,11 +223,16 @@ task.spawn(function()
                 local team=GetTeam(p)
                 local color=GetColor(team)
 
+                -- FADE DISTANCE (FOG EFFECT)
+                local alpha = math.clamp(dist / 300, 0, 1)
+
                 esp.GUI.Adornee=root
                 esp.GUI.Enabled=true
                 esp.Text.Text="[BANANA ELITE] "..p.Name.." ["..team.."]\nHP: "..hp.." | "..dist.."m"
                 esp.Text.TextColor3=color
+                esp.Text.TextTransparency = alpha
 
+                -- HITBOX
                 if Config.Hitbox then
                     root.Size=Vector3.new(Config.HitboxSize,Config.HitboxSize,Config.HitboxSize)
                     root.Transparency=0.5
@@ -234,58 +245,5 @@ task.spawn(function()
             end
         end
 
-    end
-end)
-
-end
-
---// KEY UI (ALWAYS SHOW)
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "BANANA_KEY"
-ScreenGui.Parent = game.CoreGui
-
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0,300,0,150)
-Frame.Position = UDim2.new(0.5,-150,0.5,-75)
-Frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-Frame.Parent = ScreenGui
-
-Instance.new("UICorner", Frame)
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1,0,0,40)
-Title.BackgroundTransparency = 1
-Title.Text = "BANANA ELITE KEY 🍌"
-Title.TextColor3 = Color3.fromRGB(255,255,255)
-Title.TextScaled = true
-Title.Parent = Frame
-
-local Box = Instance.new("TextBox")
-Box.Size = UDim2.new(0.8,0,0,40)
-Box.Position = UDim2.new(0.1,0,0.4,0)
-Box.PlaceholderText = "Enter Key..."
-Box.Text = ""
-Box.TextScaled = true
-Box.BackgroundColor3 = Color3.fromRGB(40,40,40)
-Box.TextColor3 = Color3.fromRGB(255,255,255)
-Box.Parent = Frame
-
-local Btn = Instance.new("TextButton")
-Btn.Size = UDim2.new(0.6,0,0,35)
-Btn.Position = UDim2.new(0.2,0,0.75,0)
-Btn.Text = "ENTER"
-Btn.TextScaled = true
-Btn.BackgroundColor3 = Color3.fromRGB(255,200,0)
-Btn.TextColor3 = Color3.fromRGB(0,0,0)
-Btn.Parent = Frame
-
-Btn.MouseButton1Click:Connect(function()
-    if Box.Text == correctKey then
-        ScreenGui:Destroy()
-        startBANANA()
-    else
-        Btn.Text = "WRONG KEY ❌"
-        task.wait(1)
-        Btn.Text = "ENTER"
     end
 end)
