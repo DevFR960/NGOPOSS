@@ -1,15 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
---// LOAD RAYFIELD
-local Rayfield
-pcall(function()
-    Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-end)
-
-if not Rayfield then
-    warn("Rayfield failed to load")
-    return
-end
+--// LOAD UI
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 --// SERVICES
 local Players = game:GetService("Players")
@@ -21,23 +13,33 @@ local Camera = workspace.CurrentCamera
 --// CONFIG
 local Config = {
     ESP = true,
-    Aimbot = false,
+    Aimbot = true,
     TeamCheck = true,
-    FOV = 180
+    WallCheck = true,
+    FOV = 200
 }
 
---// UI WINDOW
+--// UI
 local Window = Rayfield:CreateWindow({
     Name = "BANANA ELITE 🍌",
     LoadingTitle = "BANANA ELITE",
-    LoadingSubtitle = "Stable Version",
+    LoadingSubtitle = "Lost Front",
     ConfigurationSaving = {Enabled = false}
 })
 
 local Combat = Window:CreateTab("Combat")
 local Visual = Window:CreateTab("Visual")
 
---// FOV CIRCLE (SAFE)
+--// TOGGLE UI KEY
+local UIVisible = true
+UIS.InputBegan:Connect(function(i,g)
+    if not g and i.KeyCode == Enum.KeyCode.RightControl then
+        UIVisible = not UIVisible
+        Rayfield:ToggleUI()
+    end
+end)
+
+--// FOV (SAFE)
 local FOV = Instance.new("Frame")
 FOV.Size = UDim2.new(0, Config.FOV, 0, Config.FOV)
 FOV.AnchorPoint = Vector2.new(0.5,0.5)
@@ -51,73 +53,70 @@ stroke.Color = Color3.fromRGB(0,255,255)
 
 Instance.new("UICorner", FOV).CornerRadius = UDim.new(1,0)
 
---// FUNCTIONS
-
-local function GetHealth(character)
-    local hum = character:FindFirstChildOfClass("Humanoid")
-    return hum and hum.Health or 0
+--// TEAM SYSTEM (RED / BLUE)
+local function GetTeam(p)
+    if p.TeamColor == BrickColor.new("Bright red") then
+        return "RED"
+    elseif p.TeamColor == BrickColor.new("Bright blue") then
+        return "BLUE"
+    end
+    return "UNKNOWN"
 end
 
-local function GetRole(player, character)
-    if player.Team and player.Team.Name ~= "" then
-        return player.Team.Name
-    end
-
-    local stats = player:FindFirstChild("leaderstats")
-    if stats then
-        for _,v in pairs(stats:GetChildren()) do
-            if tostring(v.Name):lower():find("team") then
-                return tostring(v.Value)
-            end
-        end
-    end
-
-    if character then
-        for _,v in pairs(character:GetChildren()) do
-            if v:IsA("StringValue") then
-                return tostring(v.Value)
-            end
-        end
-    end
-
-    return "Unknown"
-end
-
-local function GetColor(role)
-    role = tostring(role):lower()
-
-    if role:find("red") then
+local function GetColor(team)
+    if team == "RED" then
         return Color3.fromRGB(255,0,0)
-    elseif role:find("blue") then
+    elseif team == "BLUE" then
         return Color3.fromRGB(0,170,255)
     end
-
     return Color3.fromRGB(255,255,255)
 end
 
-local function IsEnemy(player, character)
+local function IsEnemy(p)
     if not Config.TeamCheck then return true end
-
-    local myRole = GetRole(LocalPlayer, LocalPlayer.Character)
-    local targetRole = GetRole(player, character)
-
-    return myRole ~= targetRole
+    return GetTeam(p) ~= GetTeam(LocalPlayer)
 end
 
---// ESP SYSTEM
+--// WALL CHECK
+local function IsVisible(part)
+    if not Config.WallCheck then return true end
+
+    local origin = Camera.CFrame.Position
+    local direction = (part.Position - origin)
+
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+
+    local result = workspace:Raycast(origin, direction, params)
+
+    if result then
+        return result.Instance:IsDescendantOf(part.Parent)
+    end
+
+    return true
+end
+
+--// HEALTH
+local function GetHealth(c)
+    local h = c:FindFirstChildOfClass("Humanoid")
+    return h and h.Health or 0
+end
+
+--// ESP
 local ESP = {}
 
-local function RemoveESP(player)
-    if ESP[player] then
-        ESP[player].GUI:Destroy()
-        ESP[player] = nil
+local function RemoveESP(p)
+    if ESP[p] then
+        ESP[p].GUI:Destroy()
+        ESP[p] = nil
     end
 end
 
 Players.PlayerRemoving:Connect(RemoveESP)
 
-local function CreateESP(player)
-    if player == LocalPlayer then return end
+local function CreateESP(p)
+    if p == LocalPlayer then return end
 
     local gui = Instance.new("BillboardGui")
     gui.Size = UDim2.new(0,200,0,50)
@@ -131,13 +130,13 @@ local function CreateESP(player)
     text.TextStrokeTransparency = 0
     text.Parent = gui
 
-    ESP[player] = {GUI=gui, Text=text}
+    ESP[p] = {GUI=gui, Text=text}
 end
 
 for _,p in pairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
 
---// TARGET SYSTEM
+--// TARGET
 local LockedTarget = nil
 
 local function GetTarget()
@@ -149,7 +148,7 @@ local function GetTarget()
             local char = p.Character
             local head = char:FindFirstChild("Head")
 
-            if head and GetHealth(char) > 0 and IsEnemy(p,char) then
+            if head and GetHealth(char) > 0 and IsEnemy(p) and IsVisible(head) then
                 local pos, visible = Camera:WorldToViewportPoint(head.Position)
 
                 if visible then
@@ -170,64 +169,19 @@ local function GetTarget()
 end
 
 --// UI CONTROLS
-Combat:CreateToggle({
-    Name="Aimbot",
-    CurrentValue=false,
-    Callback=function(v) Config.Aimbot=v end
-})
+Combat:CreateToggle({Name="Aimbot",CurrentValue=true,Callback=function(v)Config.Aimbot=v end})
+Combat:CreateToggle({Name="Team Check",CurrentValue=true,Callback=function(v)Config.TeamCheck=v end})
+Combat:CreateToggle({Name="Wall Check",CurrentValue=true,Callback=function(v)Config.WallCheck=v end})
 
-Combat:CreateToggle({
-    Name="Team Check",
-    CurrentValue=true,
-    Callback=function(v) Config.TeamCheck=v end
-})
-
-Visual:CreateToggle({
-    Name="ESP",
-    CurrentValue=true,
-    Callback=function(v) Config.ESP=v end
-})
-
+Visual:CreateToggle({Name="ESP",CurrentValue=true,Callback=function(v)Config.ESP=v end})
 Visual:CreateSlider({
-    Name="FOV Size",
+    Name="FOV",
     Range={50,400},
-    CurrentValue=180,
-    Callback=function(v) Config.FOV=v end
+    CurrentValue=200,
+    Callback=function(v)Config.FOV=v end
 })
 
---// TOGGLE GUI BUTTON
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0,120,0,40)
-ToggleBtn.Position = UDim2.new(0,20,0.5,-20)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(0,170,255)
-ToggleBtn.Text = "Toggle UI"
-ToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-ToggleBtn.TextScaled = true
-ToggleBtn.Parent = game.CoreGui
-
-Instance.new("UICorner", ToggleBtn)
-
-local UIVisible = true
-
-local function ToggleUI()
-    UIVisible = not UIVisible
-    for _,v in pairs(game.CoreGui:GetChildren()) do
-        if v.Name == "Rayfield" then
-            v.Enabled = UIVisible
-        end
-    end
-end
-
-ToggleBtn.MouseButton1Click:Connect(ToggleUI)
-
-UIS.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        ToggleUI()
-    end
-end)
-
---// MAIN LOOP
+--// LOOP
 RunService.RenderStepped:Connect(function()
 
     -- FOV
@@ -244,7 +198,6 @@ RunService.RenderStepped:Connect(function()
     -- ESP
     for _,p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-
             local esp = ESP[p]
             local char = p.Character
 
@@ -257,12 +210,12 @@ RunService.RenderStepped:Connect(function()
                 continue
             end
 
-            local role = GetRole(p,char)
-            local color = GetColor(role)
+            local team = GetTeam(p)
+            local color = GetColor(team)
 
             esp.GUI.Adornee = root
             esp.GUI.Enabled = true
-            esp.Text.Text = p.Name.." ["..role.."]"
+            esp.Text.Text = p.Name.." ["..team.."]"
             esp.Text.TextColor3 = color
         end
     end
