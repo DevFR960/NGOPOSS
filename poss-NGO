@@ -23,25 +23,23 @@ local Config = {
 local Window = Rayfield:CreateWindow({
     Name = "BANANA ELITE 🍌",
     LoadingTitle = "BANANA ELITE",
-    LoadingSubtitle = "Lost Front",
+    LoadingSubtitle = "Lost Front FIXED",
     ConfigurationSaving = {Enabled = false}
 })
 
 local Combat = Window:CreateTab("Combat")
 local Visual = Window:CreateTab("Visual")
 
---// TOGGLE UI KEY
-local UIVisible = true
+--// TOGGLE UI
 UIS.InputBegan:Connect(function(i,g)
     if not g and i.KeyCode == Enum.KeyCode.RightControl then
-        UIVisible = not UIVisible
         Rayfield:ToggleUI()
     end
 end)
 
---// FOV (SAFE)
+--// FOV
 local FOV = Instance.new("Frame")
-FOV.Size = UDim2.new(0, Config.FOV, 0, Config.FOV)
+FOV.Size = UDim2.new(0,200,0,200)
 FOV.AnchorPoint = Vector2.new(0.5,0.5)
 FOV.Position = UDim2.new(0.5,0,0.5,0)
 FOV.BackgroundTransparency = 1
@@ -53,22 +51,39 @@ stroke.Color = Color3.fromRGB(0,255,255)
 
 Instance.new("UICorner", FOV).CornerRadius = UDim.new(1,0)
 
---// TEAM SYSTEM (RED / BLUE)
+--// TEAM DETECT (ADVANCED FIX)
 local function GetTeam(p)
-    if p.TeamColor == BrickColor.new("Bright red") then
-        return "RED"
-    elseif p.TeamColor == BrickColor.new("Bright blue") then
-        return "BLUE"
+    -- Method 1: Roblox Team
+    if p.Team and p.Team.Name ~= "" then
+        return p.Team.Name
     end
+
+    -- Method 2: TeamColor
+    if p.TeamColor then
+        return p.TeamColor.Name
+    end
+
+    -- Method 3: Character values
+    if p.Character then
+        for _,v in pairs(p.Character:GetChildren()) do
+            if v:IsA("StringValue") then
+                return tostring(v.Value)
+            end
+        end
+    end
+
     return "UNKNOWN"
 end
 
 local function GetColor(team)
-    if team == "RED" then
-        return Color3.fromRGB(255,0,0)
-    elseif team == "BLUE" then
-        return Color3.fromRGB(0,170,255)
+    local t = tostring(team):lower()
+
+    if t:find("red") then return Color3.fromRGB(255,0,0)
+    elseif t:find("blue") then return Color3.fromRGB(0,170,255)
+    elseif t:find("enemy") then return Color3.fromRGB(255,0,0)
+    elseif t:find("ally") then return Color3.fromRGB(0,255,0)
     end
+
     return Color3.fromRGB(255,255,255)
 end
 
@@ -168,7 +183,7 @@ local function GetTarget()
     LockedTarget = closest
 end
 
---// UI CONTROLS
+--// UI
 Combat:CreateToggle({Name="Aimbot",CurrentValue=true,Callback=function(v)Config.Aimbot=v end})
 Combat:CreateToggle({Name="Team Check",CurrentValue=true,Callback=function(v)Config.TeamCheck=v end})
 Combat:CreateToggle({Name="Wall Check",CurrentValue=true,Callback=function(v)Config.WallCheck=v end})
